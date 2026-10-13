@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Robot Arms: Modified DH and 3D Frames</title>
+<style>
+:root{--bg:#eef1f4;--fg:#1c2530;--panel:#fffffff0;--line:#c9d1da;--acc:#1f6f8b;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#141a20;--fg:#e6ebf0;--panel:#1e262ef0;--line:#34404c;--acc:#5fc1e0}}
+:root[data-theme="dark"]{--bg:#141a20;--fg:#e6ebf0;--panel:#1e262ef0;--line:#34404c;--acc:#5fc1e0}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--fg);font-family:"Trebuchet MS",Verdana,sans-serif;overflow:hidden}
+#c{position:fixed;inset:0;width:100%;height:100%;touch-action:none;display:block}
+#ui{position:fixed;left:12px;top:calc(12px + env(safe-area-inset-top,0px));width:310px;max-width:calc(100% - 24px);max-height:calc(100% - 24px - env(safe-area-inset-top,0px));overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px;font-size:13px;box-sizing:border-box}
+select{width:100%;font:inherit;padding:6px;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:6px}
+label{display:flex;justify-content:space-between;margin-top:8px}
+input[type=range]{width:100%;accent-color:var(--acc)}
+h2{font-size:13px;margin:14px 0 4px}
+table{border-collapse:collapse;width:100%;font-size:12px;text-align:center}
+td,th{border:1px solid var(--line);padding:3px 2px}
+td.v{font-weight:bold;color:var(--acc)}
+pre{margin:0;font-family:Consolas,monospace;font-size:12px;line-height:1.45;white-space:pre-wrap}
+.leg span{display:inline-block;width:10px;height:10px;margin-right:4px;vertical-align:middle}
+#hint{position:fixed;right:12px;bottom:calc(12px + env(safe-area-inset-bottom,0px));font-size:12px;opacity:.7}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="ui">
+  <select id="sel"></select>
+  <div id="sl"></div>
+  <label style="justify-content:flex-start;gap:6px"><input type="checkbox" id="showF" checked> Show frames</label>
+  <div class="leg" style="margin-top:6px"><span style="background:#e5484d"></span>x <span style="background:#30a46c"></span>y <span style="background:#3e63dd"></span>z &nbsp; link orange = prismatic</div>
+  <h2>Modified DH table</h2><div id="dh"></div>
+  <div style="margin-top:4px;font-size:11px;opacity:.8">ⁱ⁻¹Tᵢ = Rot(x,αᵢ₋₁)·Trans(x,aᵢ₋₁)·Rot(z,θᵢ)·Trans(z,dᵢ). Bold = joint variable.</div>
+  <h2>Forward kinematics</h2><pre id="fk"></pre>
+  <h2>Live ⁰Tₙ (end frame)</h2><pre id="mat"></pre>
+</div>
+<div id="hint">Drag to orbit, scroll or pinch to zoom</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const D=Math.PI/180;
+// rows: [alpha(deg), a, d, theta(deg), var]; var=['R'|'P', sliderIndex]. tbl row: [a, alpha, d, theta]
+const ROBOTS=[
+{n:'Robot 1: 3-DoF R-R-R',tool:1,tgt:[0.4,0.8,0],
+ rows:[[0,0,1,0,['R',0]],[90,0,0,0,['R',1]],[0,1.5,0,0,['R',2]],[0,1.2,0,0]],
+ tbl:[['0','0','l₁','θ₁'],['0','90°','0','θ₂'],['l₂','0','0','θ₃'],['l₃','0','0','0']],
+ sl:[['θ₁',-180,180,30,1],['θ₂',-90,90,40,1],['θ₃',-150,150,-30,1]],
+ fk:'x = c₁(l₂c₂ + l₃c₂₃)\ny = s₁(l₂c₂ + l₃c₂₃)\nz = l₁ + l₂s₂ + l₃s₂₃\n(l₁=1, l₂=1.5, l₃=1.2)'},
+{n:'Robot 2: 3-DoF P-R-P',tgt:[0,1.3,0],
+ rows:[[0,0,0,0,['P',0]],[0,0,0,90,['R',1]],[90,0,0,0,['P',2]]],
+ tbl:[['0','0','d₁','0'],['0','0','0','θ₂ = θ + 90°'],['0','90°','d₃','0']],
+ sl:[['d₁',0,2,1,0],['θ',-180,180,40,1],['d₃',0.3,2,1.2,0]],
+ fk:'x = d₃ cos θ\ny = d₃ sin θ\nz = d₁'},
+{n:'Robot 3: 4-DoF SCARA',tgt:[0.5,0.8,0],
+ rows:[[0,0,1.5,0,['R',0]],[0,1.5,0,0,['R',1]],[0,1.2,0,0,['R',2]],[180,0,0,0,['P',3]]],
+ tbl:[['0','0','l₁','θ₁'],['l₂','0','0','θ₂'],['l₃','0','0','θ₃'],['0','180°','d','0']],
+ sl:[['θ₁',-150,150,40,1],['θ₂',-150,150,60,1],['θ₃',-180,180,30,1],['d',0,1,0.4,0]],
+ fk:'x = l₂c₁ + l₃c₁₂\ny = l₂s₁ + l₃s₁₂\nz = l₁ − d\nφ = θ₁ + θ₂ + θ₃\n(l₁=1.5, l₂=1.5, l₃=1.2)'},
+{n:'Robot 4: 4-DoF R-P-P-R',tgt:[0.3,1.2,0],
+ rows:[[0,0,1.5,90,['R',0]],[90,0,0,90,['P',1]],[90,0,0,-90,['P',2]],[-90,0,0.6,0,['R',3]]],
+ tbl:[['0','0','l₁','θ₁ = θ + 90°'],['0','90°','d₁','90°'],['0','90°','d₂','−90°'],['0','−90°','l₂','θ₂']],
+ sl:[['θ₁',-180,180,30,1],['d₁',0.2,2,1.2,0],['d₂',0.2,1.5,0.8,0],['θ₂',-180,180,20,1]],
+ fk:'x = d₁cosθ − d₂sinθ\ny = d₁sinθ + d₂cosθ\nz = l₁ + l₂\n(l₁=1.5, l₂=0.6)'},
+{n:'Robot 5: 4-DoF R-R-P-R',tgt:[0.3,1.3,0],
+ rows:[[0,0,1.2,0,['R',0]],[90,0,0,0,['R',1]],[-90,1.4,0,0,['P',2]],[0,0,0,0,['R',3]]],
+ tbl:[['0','0','l₁','θ₁'],['0','90°','0','θ₂'],['l₂','−90°','d','0'],['0','0','0','θ₃']],
+ sl:[['θ₁',-180,180,30,1],['θ₂',-150,150,35,1],['d',0,1.2,0.6,0],['θ₃',-180,180,40,1]],
+ fk:'x = c₁(l₂c₂ − d s₂)\ny = s₁(l₂c₂ − d s₂)\nz = l₁ + l₂s₂ + d c₂\n(l₁=1.2, l₂=1.4)'},
+{n:'Robot 6: 6-DoF articulated',tool:1,tgt:[0.2,1.5,0],
+ rows:[[0,0,1.2,0,['R',0]],[-90,0,0,0,['R',1]],[0,1.3,0,0,['R',2]],[-90,0,1.2,0,['R',3]],[90,0,0,0,['R',4]],[-90,0,0,0,['R',5]],[0,0,0.5,0]],
+ tbl:[['0','0','l₁','θ₁'],['0','−90°','0','θ₂'],['l₂','0','0','θ₃'],['0','−90°','l₃','θ₄'],['0','90°','0','θ₅'],['0','−90°','0','θ₆'],['0','0','l₄','0']],
+ sl:[['θ₁',-180,180,20,1],['θ₂',-180,180,-90,1],['θ₃',-180,180,-130,1],['θ₄',-180,180,30,1],['θ₅',-180,180,40,1],['θ₆',-180,180,20,1]],
+ fk:'Wrist center:\nx = c₁(l₂c₂ − l₃s₂₃)\ny = s₁(l₂c₂ − l₃s₂₃)\nz = l₁ − l₂s₂ − l₃c₂₃\nTool = wrist + l₄·z₆\n(l₁=1.2, l₂=1.3, l₃=1.2, l₄=0.5)'}
+];
+
+const cv=document.getElementById('c');
+const R=new THREE.WebGLRenderer({canvas:cv,antialias:true,alpha:true});
+R.setPixelRatio(Math.min(devicePixelRatio,2));
+const scene=new THREE.Scene();
+const cam=new THREE.PerspectiveCamera(45,1,0.1,100);
+const root=new THREE.Group(); // robot frame (z up) -> three (y up)
+root.matrixAutoUpdate=false;
+root.matrix.set(1,0,0,0, 0,0,1,0, 0,-1,0,0, 0,0,0,1);
+scene.add(root);
+scene.add(new THREE.AmbientLight(0xffffff,0.8));
+const dl=new THREE.DirectionalLight(0xffffff,0.6);dl.position.set(3,6,4);scene.add(dl);
+const grid=new THREE.GridHelper(8,16,0x8896a5,0x8896a5);
+grid.material.transparent=true;grid.material.opacity=0.3;scene.add(grid);
+const dyn=new THREE.Group();root.add(dyn);
+
+const mat=new THREE.MeshStandardMaterial({color:0x7a8794,metalness:0.3,roughness:0.5});
+const matP=new THREE.MeshStandardMaterial({color:0xd9822b,metalness:0.2,roughness:0.5});
+const matJ=new THREE.MeshStandardMaterial({color:0x1f6f8b,metalness:0.2,roughness:0.4});
+const cyl=(r,m)=>new THREE.Mesh(new THREE.CylinderGeometry(r,r,1,24),m);
+const base=cyl(0.6,mat);base.scale.y=0.12;base.rotation.x=Math.PI/2;base.position.z=-0.06;root.add(base);
+
+function dh(al,a,th,d){
+  const m=new THREE.Matrix4().makeRotationX(al);
+  m.multiply(new THREE.Matrix4().makeTranslation(a,0,0));
+  m.multiply(new THREE.Matrix4().makeRotationZ(th));
+  m.multiply(new THREE.Matrix4().makeTranslation(0,0,d));
+  return m;
+}
+const SUB='₀₁₂₃₄₅₆₇';
+function label(txt,color){
+  const c=document.createElement('canvas');c.width=128;c.height=64;
+  const g=c.getContext('2d');g.font='bold 40px Trebuchet MS, Verdana, sans-serif';
+  g.fillStyle=color;g.textAlign='center';g.textBaseline='middle';g.fillText(txt,64,32);
+  const s=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(c),depthTest:false}));
+  s.scale.set(0.5,0.25,1);return s;
+}
+function frame(name,len){
+  const g=new THREE.Group();
+  const cols=[0xe5484d,0x30a46c,0x3e63dd],dirs=[[1,0,0],[0,1,0],[0,0,1]],nm=['x','y','z'];
+  dirs.forEach((d,i)=>{
+    g.add(new THREE.ArrowHelper(new THREE.Vector3(...d),new THREE.Vector3(),len,cols[i],len*0.25,len*0.12));
+    const s=label(nm[i]+name,'#'+cols[i].toString(16));
+    s.position.set(d[0]*(len+0.2),d[1]*(len+0.2),d[2]*(len+0.2));g.add(s);
+  });
+  g.matrixAutoUpdate=false;dyn.add(g);return g;
+}
+const P=m=>new THREE.Vector3().setFromMatrixPosition(m);
+function place(mesh,p,q){
+  const d=q.clone().sub(p),len=d.length()||1e-6;
+  const qq=new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,1,0),d.clone().normalize());
+  mesh.matrix.compose(p.clone().add(q).multiplyScalar(0.5),qq,new THREE.Vector3(1,len,1));
+}
+let cur,F,links,hubs,tip,ins=[];
+const sel=document.getElementById('sel');
+ROBOTS.forEach((r,i)=>sel.add(new Option(r.n,i)));
+function load(k){
+  cur=ROBOTS[k];
+  dyn.children.slice().forEach(c=>dyn.remove(c));
+  const n=cur.rows.length;
+  F=[];for(let i=0;i<=n;i++)F.push(frame(cur.tool&&i==n?'T':SUB[i],Math.max(0.28,0.6-0.05*i)));
+  const mk=(r,m)=>{const c=cyl(r,m);c.matrixAutoUpdate=false;dyn.add(c);return c;};
+  links=cur.rows.map(r=>mk(0.08,r[4]&&r[4][0]=='P'?matP:mat));
+  hubs=cur.rows.map(r=>r[4]&&r[4][0]=='R'?mk(0.15,matJ):null);
+  tip=new THREE.Mesh(new THREE.SphereGeometry(0.09,16,16),new THREE.MeshStandardMaterial({color:0xd9822b}));dyn.add(tip);
+  document.getElementById('sl').innerHTML=cur.sl.map((s,i)=>`<label>${s[0]} <b id="v${i}"></b></label><input id="s${i}" type="range" min="${s[1]}" max="${s[2]}" step="${s[4]?1:0.01}" value="${s[3]}">`).join('');
+  ins=cur.sl.map((s,i)=>{const e=document.getElementById('s'+i);e.addEventListener('input',update);return e;});
+  document.getElementById('dh').innerHTML='<table><tr><th>i</th><th>aᵢ₋₁</th><th>αᵢ₋₁</th><th>dᵢ</th><th>θᵢ</th></tr>'+cur.tbl.map((r,i)=>{const v=cur.rows[i][4];
+    return `<tr><td>${cur.tool&&i==n-1?'T':i+1}</td><td>${r[0]}</td><td>${r[1]}</td><td class="${v&&v[0]=='P'?'v':''}">${r[2]}</td><td class="${v&&v[0]=='R'?'v':''}">${r[3]}</td></tr>`;}).join('')+'</table>';
+  document.getElementById('fk').textContent=cur.fk;
+  target.set(...cur.tgt);setCam();update();
+}
+function update(){
+  const q=cur.sl.map((s,i)=>+ins[i].value*(s[4]?D:1));
+  cur.sl.forEach((s,i)=>document.getElementById('v'+i).textContent=s[4]?ins[i].value+'°':(+ins[i].value).toFixed(2));
+  let T=new THREE.Matrix4();const Ts=[T];
+  cur.rows.forEach(r=>{let th=r[3]*D,d=r[2];const v=r[4];if(v){if(v[0]=='R')th+=q[v[1]];else d+=q[v[1]];}
+    T=T.clone().multiply(dh(r[0]*D,r[1],th,d));Ts.push(T);});
+  Ts.forEach((m,i)=>F[i].matrix.copy(m));
+  const p=Ts.map(P),k=(v,c)=>v.clone().multiplyScalar(c);
+  cur.rows.forEach((r,i)=>{
+    const a=p[i],b=p[i+1];
+    links[i].visible=a.distanceTo(b)>0.03;if(links[i].visible)place(links[i],a,b);
+    if(hubs[i]){const z=new THREE.Vector3(0,0,1).transformDirection(Ts[i+1]);place(hubs[i],b.clone().sub(k(z,0.15)),b.clone().add(k(z,0.15)));}
+  });
+  tip.position.copy(p[p.length-1]);
+  const e=T.elements,f=v=>(v<0?'':' ')+v.toFixed(3);
+  let s='';for(let r=0;r<3;r++)s+='['+[0,1,2,3].map(c=>f(e[c*4+r])).join(' ')+']\n';
+  document.getElementById('mat').textContent=s+'[ 0.000  0.000  0.000  1.000]';
+}
+document.getElementById('showF').onchange=e=>F.forEach(g=>g.visible=e.target.checked);
+sel.onchange=()=>{load(+sel.value);document.getElementById('showF').checked=true;};
+
+let az=0.9,el=0.4,dist=9;const target=new THREE.Vector3();
+function setCam(){
+  cam.position.set(target.x+dist*Math.cos(el)*Math.sin(az),target.y+dist*Math.sin(el),target.z+dist*Math.cos(el)*Math.cos(az));
+  cam.lookAt(target);
+}
+const pts=new Map();let pinch=0;
+cv.addEventListener('pointerdown',e=>{cv.setPointerCapture(e.pointerId);pts.set(e.pointerId,[e.clientX,e.clientY]);});
+cv.addEventListener('pointerup',e=>{pts.delete(e.pointerId);pinch=0;});
+cv.addEventListener('pointermove',e=>{
+  if(!pts.has(e.pointerId))return;
+  const o=pts.get(e.pointerId);pts.set(e.pointerId,[e.clientX,e.clientY]);
+  if(pts.size===1){az-=(e.clientX-o[0])*0.008;el=Math.max(-1.4,Math.min(1.5,el+(e.clientY-o[1])*0.008));}
+  else if(pts.size===2){const [a,b]=[...pts.values()];const d=Math.hypot(a[0]-b[0],a[1]-b[1]);if(pinch)dist=Math.max(3,Math.min(20,dist*pinch/d));pinch=d;}
+  setCam();
+});
+cv.addEventListener('wheel',e=>{e.preventDefault();dist=Math.max(3,Math.min(20,dist*(1+e.deltaY*0.001)));setCam();},{passive:false});
+function resize(){R.setSize(innerWidth,innerHeight,false);cam.aspect=innerWidth/innerHeight;cam.updateProjectionMatrix();}
+addEventListener('resize',resize);
+resize();load(0);
+(function loop(){R.render(scene,cam);requestAnimationFrame(loop);})();
+</script>
+</body>
+</html>
