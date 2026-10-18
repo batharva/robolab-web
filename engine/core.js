@@ -87,6 +87,11 @@ const RL = (function () {
     const ct = Math.cos(theta), st = Math.sin(theta), ca = Math.cos(alpha), sa = Math.sin(alpha);
     return [[ct, -st * ca, st * sa, a * ct], [st, ct * ca, -ct * sa, a * st], [0, sa, ca, d], [0, 0, 0, 1]];
   }
+  /** Modified (Craig) DH link transform: Rx(alpha[i-1]) Tx(a[i-1]) Rz(theta[i]) Tz(d[i]). */
+  function mdhMatrix(a, alpha, d, theta) {
+    const ct = Math.cos(theta), st = Math.sin(theta), ca = Math.cos(alpha), sa = Math.sin(alpha);
+    return [[ct, -st, 0, a], [st * ca, ct * ca, -sa, -sa * d], [st * sa, ct * sa, ca, ca * d], [0, 0, 0, 1]];
+  }
   function invT(T) {
     const R = Rof(T), Rt = Mx.T(R), p = Pof(T), pi = Mx.mulVec(Rt, p).map(x => -x);
     return [[Rt[0][0], Rt[0][1], Rt[0][2], pi[0]], [Rt[1][0], Rt[1][1], Rt[1][2], pi[1]], [Rt[2][0], Rt[2][1], Rt[2][2], pi[2]], [0, 0, 0, 1]];
@@ -186,24 +191,45 @@ const RL = (function () {
   }
   const PRESET_IDS = [['planar2', '2-link planar'], ['arm3', '3-DOF articulated'], ['scara4', '4-DOF SCARA'], ['ur5like', '6-DOF UR5-like']];
   const cloneRobot = (r) => JSON.parse(JSON.stringify(r));
+  /** Exact re-expression of a robot in the other DH convention (classical <-> modified/Craig). */
+  function convertConvention(robot, to) {
+    const from = robot.convention === 'mdh' ? 'mdh' : 'classical'; if (from === to) return robot;
+    const r = cloneRobot(robot), O = robot.joints, J = r.joints, n = J.length, tl = robot.tool || [0, 0, 0];
+    for (let i = 0; i < n; i++) {
+      if (to === 'mdh') { J[i].a = i ? O[i - 1].a : 0; J[i].alpha = i ? O[i - 1].alpha : 0; const al = O[i].alpha * D2R, c = O[i].com, ca = Math.cos(al), sa = Math.sin(al);
+        J[i].com = [O[i].a + c[0], ca * c[1] - sa * c[2], sa * c[1] + ca * c[2]]; }
+      else { J[i].a = i < n - 1 ? O[i + 1].a : tl[0]; J[i].alpha = i < n - 1 ? O[i + 1].alpha : 0; const al = J[i].alpha * D2R, c = O[i].com, ca = Math.cos(al), sa = Math.sin(al);
+        J[i].com = [c[0] - J[i].a, ca * c[1] + sa * c[2], -sa * c[1] + ca * c[2]]; }
+    }
+    if (to === 'mdh') r.tool = [O[n - 1].a, 0, 0]; else delete r.tool;
+    r.convention = to; return r;
+  }
+  /** Slender-rod mass estimate; in modified DH the link extends from frame i to frame i+1 (stored in the next row / tool). */
+  function autoInertialAt(robot, i) {
+    const j = robot.joints[i]; if (robot.convention !== 'mdh') return autoInertial(j);
+    const nx = robot.joints[i + 1], al = nx ? nx.alpha * D2R : 0, v = nx ? [nx.a, -Math.sin(al) * nx.d, Math.cos(al) * nx.d] : (robot.tool || [0, 0, 0]), len = Math.hypot(v[0], v[1], v[2]);
+    j.com = v.map(x => x / 2); const I = j.mass * (len * len / 12 + 1.6e-3); j.inertia = [I, I, I]; return j; /* 1.6e-3 ≈ 40 mm body radius: keeps M(q) well-conditioned for very short links */
+  }
 
   /* ------------------------ forward kinematics --------------------------- */
-  function linkTransform(j, qi) {
+  function linkTransform(j, qi, mdh) {
     const theta = j.type === 'R' ? j.theta * D2R + qi : j.theta * D2R;
     const d = j.type === 'P' ? j.d + qi : j.d;
-    return dhMatrix(j.a, j.alpha * D2R, d, theta);
+    return (mdh ? mdhMatrix : dhMatrix)(j.a, j.alpha * D2R, d, theta);
   }
   /** Full FK: frames[i] = ⁰T_i (frames[0] = identity), links[i-1] = ^{i-1}T_i. */
   function fk(robot, q) {
     const frames = [eye4()], links = [];
     let T = eye4();
     for (let i = 0; i < robot.joints.length; i++) {
-      const A = linkTransform(robot.joints[i], q[i]); links.push(A); T = Mx.mul(T, A); frames.push(T);
+      const A = linkTransform(robot.joints[i], q[i], robot.convention === 'mdh'); links.push(A); T = Mx.mul(T, A); frames.push(T);
     }
+    const tl = robot.tool; if (tl && (tl[0] || tl[1] || tl[2])) T = Mx.mul(T, [[1, 0, 0, tl[0]], [0, 1, 0, tl[1]], [0, 0, 1, tl[2]], [0, 0, 0, 1]]);
     return { frames, links, T };
   }
   /** Fast, allocation-light end-effector position (used for workspace sampling). */
   function fkPos(robot, q, out) {
+    if (robot.convention === 'mdh' || robot.tool) { const pp = Pof(fk(robot, q).T); out = out || [0, 0, 0]; out[0] = pp[0]; out[1] = pp[1]; out[2] = pp[2]; return out; }
     let r00 = 1, r01 = 0, r02 = 0, r10 = 0, r11 = 1, r12 = 0, r20 = 0, r21 = 0, r22 = 1, px = 0, py = 0, pz = 0;
     for (let i = 0; i < robot.joints.length; i++) {
       const j = robot.joints[i], th = (j.type === 'R' ? j.theta * D2R + q[i] : j.theta * D2R), d = j.type === 'P' ? j.d + q[i] : j.d, al = j.alpha * D2R;
@@ -222,9 +248,9 @@ const RL = (function () {
   /* ------------------------------ Jacobian ------------------------------- */
   /** Geometric Jacobian in the BASE frame, 6×n: rows 0-2 linear velocity, rows 3-5 angular velocity. */
   function jacobianFromFrames(robot, frames) {
-    const n = robot.joints.length, pe = Pof(frames[n]), J = Mx.zeros(6, n);
+    const n = robot.joints.length, s = robot.convention === 'mdh' ? 1 : 0, pe = V.add(Pof(frames[n]), Mx.mulVec(Rof(frames[n]), robot.tool || [0, 0, 0])), J = Mx.zeros(6, n);
     for (let i = 0; i < n; i++) {
-      const z = colOf(frames[i], 2), p = Pof(frames[i]);
+      const z = colOf(frames[i + s], 2), p = Pof(frames[i + s]);
       if (robot.joints[i].type === 'R') { const v = V.cross(z, V.sub(pe, p)); for (let k = 0; k < 3; k++) { J[k][i] = v[k]; J[3 + k][i] = z[k]; } }
       else for (let k = 0; k < 3; k++) J[k][i] = z[k];
     }
@@ -323,13 +349,16 @@ const RL = (function () {
     return { solutions: sols, attempts: all };
   }
   /** Is the robot a 2-link planar RR arm (all alpha = 0, d = 0)? Analytical IK applies. */
-  function isPlanar2R(robot) {
-    const J = robot.joints; return J.length === 2 && J.every(j => j.type === 'R' && Math.abs(j.alpha) < 1e-9 && Math.abs(j.d) < 1e-9) && Math.abs(J[0].a) > 1e-9 && Math.abs(J[1].a) > 1e-9;
+  function lens2R(robot) {
+    const J = robot.joints; if (J.length !== 2 || !J.every(j => j.type === 'R' && Math.abs(j.alpha) < 1e-9 && Math.abs(j.d) < 1e-9)) return null;
+    if (robot.convention === 'mdh') { const t = robot.tool || [0, 0, 0]; return Math.abs(J[0].a) < 1e-9 && Math.abs(J[1].a) > 1e-9 && Math.abs(t[0]) > 1e-9 && !t[1] && !t[2] ? [J[1].a, t[0]] : null; }
+    return Math.abs(J[0].a) > 1e-9 && Math.abs(J[1].a) > 1e-9 ? [J[0].a, J[1].a] : null;
   }
+  const isPlanar2R = (robot) => !!lens2R(robot);
   /** Closed-form IK of the 2R planar arm for target (x, y, z). Returns up to two solutions. */
   function ik2R(robot, x, y, z, tol = 1e-9) {
     if (!isPlanar2R(robot)) return { applicable: false, solutions: [], reachable: false, message: 'Analytical solver applies only to 2-link planar RR robots.' };
-    const [j1, j2] = robot.joints, l1 = j1.a, l2 = j2.a, r2 = x * x + y * y;
+    const [j1, j2] = robot.joints, [l1, l2] = lens2R(robot), r2 = x * x + y * y;
     if (Math.abs(z) > 1e-6) return { applicable: true, solutions: [], reachable: false, message: 'Target is out of the robot plane (z must be 0).' };
     const c2 = (r2 - l1 * l1 - l2 * l2) / (2 * l1 * l2);
     if (Math.abs(c2) > 1 + tol) return { applicable: true, solutions: [], reachable: false, message: 'Target is outside the reachable annulus |L1−L2| ≤ r ≤ L1+L2 (r = ' + Math.sqrt(r2).toFixed(4) + ' m).' };
@@ -411,12 +440,12 @@ const RL = (function () {
 
   /* ------------------------------- dynamics ------------------------------ */
   function linkComJacobians(robot, frames) {
-    const n = robot.joints.length, out = [];
+    const n = robot.joints.length, out = [], s = robot.convention === 'mdh' ? 1 : 0;
     for (let i = 1; i <= n; i++) {
       const L = robot.joints[i - 1], R = Rof(frames[i]), pc = V.add(Pof(frames[i]), Mx.mulVec(R, L.com));
       const Jv = Mx.zeros(3, n), Jw = Mx.zeros(3, n);
       for (let j = 0; j < i; j++) {
-        const z = colOf(frames[j], 2), p = Pof(frames[j]);
+        const z = colOf(frames[j + s], 2), p = Pof(frames[j + s]);
         if (robot.joints[j].type === 'R') { const v = V.cross(z, V.sub(pc, p)); for (let k = 0; k < 3; k++) { Jv[k][j] = v[k]; Jw[k][j] = z[k]; } }
         else for (let k = 0; k < 3; k++) Jv[k][j] = z[k];
       }
@@ -518,7 +547,7 @@ const RL = (function () {
     });
     const gravity = Array.isArray(r.gravity) && r.gravity.length === 3 && r.gravity.every(v => isNum(v) && Math.abs(v) <= 1e3) ? r.gravity.slice() : (err.push('gravity must be three finite numbers.'), [0, 0, -9.81]);
     let home = Array.isArray(r.home) && r.home.length === joints.length && r.home.every(isNum) ? r.home.slice() : (err.push('home must have one finite number per joint.'), joints.map(() => 0));
-    return { ok: err.length === 0, errors: err, robot: { id: cleanStr(r.id, 'custom'), name: cleanStr(r.name, 'Imported robot'), scope: cleanStr(r.scope, 'Imported robot.') + '', gravity, joints, home } };
+    return { ok: err.length === 0, errors: err, robot: { id: cleanStr(r.id, 'custom'), name: cleanStr(r.name, 'Imported robot'), scope: cleanStr(r.scope, 'Imported robot.') + '', gravity, joints, home, convention: r.convention === 'mdh' ? 'mdh' : 'classical', tool: r.convention === 'mdh' && Array.isArray(r.tool) && r.tool.length === 3 && r.tool.every(v => isNum(v) && Math.abs(v) <= 100) ? r.tool.slice() : (r.convention === 'mdh' ? [0, 0, 0] : undefined) } };
   }
   function validateProject(p) {
     if (!p || typeof p !== 'object' || p.format !== 'robolab-web-project') return { ok: false, errors: ['Not a RoboLab Web project file (format field missing).'] };
@@ -534,6 +563,10 @@ const RL = (function () {
     const rng = makeRng(2024);
     const maxd = (A, B) => maxAbsDiff(A, B);
     // 1 identity
+    { const r0 = buildPreset('ur5like'), r1 = convertConvention(r0, 'mdh'), r2 = buildPreset('scara4'), r3 = convertConvention(r2, 'mdh'); let m = 0, mj = 0, mm = 0, mg = 0;
+      for (let k = 0; k < 100; k++) { for (const [A, B] of [[r0, r1], [r2, r3]]) { const q = sampleConfig(A, rng); m = Math.max(m, maxd(fk(A, q).T, fk(B, q).T)); mj = Math.max(mj, maxAbsDiff(jacobian(A, q), jacobian(B, q))); mm = Math.max(mm, maxAbsDiff(massMatrix(A, q), massMatrix(B, q))); mg = Math.max(mg, Math.max(...gravityVector(A, q, [0, 0, -9.81]).map((g, i) => Math.abs(g - gravityVector(B, q, [0, 0, -9.81])[i])))); } }
+      add('Modified DH ≡ classical (UR5-like & SCARA, 200 poses): FK, Jacobian, M(q), g(q)', m < 1e-12 && mj < 1e-12 && mm < 1e-9 && mg < 1e-9, 'max |ΔT| = ' + m.toExponential(1) + ', |ΔJ| = ' + mj.toExponential(1) + ', |ΔM| = ' + mm.toExponential(1) + ', |Δg| = ' + mg.toExponential(1));
+      const mk = convertConvention(convertConvention(r0, 'mdh'), 'classical'); add('Convention conversion round-trips', JSON.stringify(mk.joints.map(j => [j.a, j.alpha])) === JSON.stringify(r0.joints.map(j => [j.a, j.alpha]))); }
     { const r = { joints: [makeJoint({ a: 0, alpha: 0, d: 0, theta: 0 })] }; const T = fk(r, [0]).T; add('DH identity (a=α=d=θ=0)', maxd(T, eye4()) < 1e-15, 'max |T − I| = ' + maxd(T, eye4()).toExponential(2)); }
     // 2 known pose
     { const T = Mx.mul(dhMatrix(0, 0, 0, Math.PI / 2), dhMatrix(1, 0, 0, 0)); add('Homogeneous product Rz(90°)·Tx(1) → p = (0,1,0)', Math.abs(T[0][3]) < 1e-12 && Math.abs(T[1][3] - 1) < 1e-12, 'p = (' + T[0][3].toExponential(1) + ', ' + T[1][3].toFixed(6) + ', ' + T[2][3] + ')'); }
@@ -601,7 +634,7 @@ const RL = (function () {
     return res;
   }
 
-  return { D2R, R2D, clamp, wrapPi, isNum, V, Mx, eye4, Rof, Pof, colOf, dhMatrix, invT, rpyToR, rToRPY, rotationCheck, logRot, makeJoint, autoInertial,
+  return { D2R, R2D, clamp, wrapPi, isNum, V, Mx, eye4, Rof, Pof, colOf, dhMatrix, mdhMatrix, convertConvention, autoInertialAt, invT, rpyToR, rToRPY, rotationCheck, logRot, makeJoint, autoInertial,
     jointLimitsSI, jointDisplayScale, clampQ, qWithinLimits, reachEstimate, buildPreset, PRESET_IDS, cloneRobot, linkTransform, fk, fkPos, jacobian, jacobianFromFrames,
     jacobianFD, maxAbsDiff, analyzeJacobian, jointVelocityFromTwist, makeRng, ikDLS, ikMulti, isPlanar2R, ik2R, qDistance, polyCoeffs, evalPoly, jointTrajectory,
     trajectoryChecks, cartesianLineTrajectory, TRAJ_MAX_SAMPLES, massMatrix, gravityVector, coriolisMatrix, inverseDynamics, forwardDynamics, energy, simulateForward,
