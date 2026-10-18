@@ -305,39 +305,6 @@ This is the documented project layout. Confirm the filenames against your curren
 
 ---
 
-## ⚠️ Limitations
-
-- Only classical DH parameters are implemented; modified DH is not supported.
-- Example robot models are simplified educational representations.
-- Default mass and inertia values are estimates.
-- Dynamics do not include friction, actuator dynamics, contact forces, or joint-limit enforcement during simulation.
-- Numerical inverse kinematics may fail near singularities, joint limits, or local minima.
-- Cartesian trajectory velocity and acceleration are estimated using finite differences.
-- Workspace sampling estimates reachability; it does not prove the exact boundary.
-- Workspace analysis does not evaluate self-collision or orientation reachability.
-- Automated tests do not replace visual testing of WebGL rendering, touch interactions, mobile layouts, or accessibility.
-
-RoboLab Web is designed for education, numerical experimentation, and robotics analysis rather than safety-critical control of physical robots.
-
----
-
-## 🔮 Future Improvements
-
-Potential future enhancements include:
-
-- Modified DH convention support.
-- Additional industrial robot models.
-- URDF import and export.
-- Collision detection and avoidance.
-- Advanced trajectory optimization.
-- Friction and actuator dynamics.
-- Additional inverse-kinematics algorithms.
-- Improved mobile visualization and accessibility.
-
-These are potential enhancements, not claims about currently implemented features.
-
----
-
 ## 👨‍💻 Authors
 
 ### Atharva Bhosale
@@ -348,20 +315,6 @@ Mechanical Engineering Student | Robotics | Simulation | Software Development
 ### Kanishk Patel
 
 - **GitHub:** [@KanishkPatel0206](https://github.com/KanishkPatel0206)
-
----
-
-<p align="center">
-  <strong>Explore robotics. Understand the mathematics. Visualize the motion.</strong>
-  <br><br>
-  <a href="https://batharva.github.io/robolab-web/">🚀 Launch RoboLab Web</a>
-</p>
-
-
-- **GitHub:** [@batharva](https://github.com/batharva)
-- **Project Repository:** [robolab-web](https://github.com/batharva/robolab-web)
-- **Live Demo:** [RoboLab Web](https://batharva.github.io/robolab-web/)
-
 ---
 
 ## 📄 License
@@ -369,9 +322,3 @@ Mechanical Engineering Student | Robotics | Simulation | Software Development
 Add a `LICENSE` file to the repository to specify the terms under which others can use, modify, and distribute this project.
 
 ---
-
-<p align="center">
-  <strong>Explore robotics. Understand the mathematics. Visualize the motion.</strong>
-  <br><br>
-  <a href="https://batharva.github.io/robolab-web/">🚀 Launch RoboLab Web</a>
-</p>
