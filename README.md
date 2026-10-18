@@ -1,99 +1,371 @@
-# ✳ Crayon Robotics Lab v2 — Verified Modified-DH Workspace
+```{=html}
+<p align="center">
+```
+```{=html}
+<h1 align="center">
+```
+🤖 RoboLab Web
+```{=html}
+</h1>
+```
+```{=html}
+<p align="center">
+```
+`<strong>`{=html}Interactive Robotics Analysis Studio`</strong>`{=html}
+```{=html}
+</p>
+```
+```{=html}
+<p align="center">
+```
+Explore robot kinematics, dynamics, trajectory planning, and 3D
+workspaces directly in your browser.
+```{=html}
+</p>
+```
+```{=html}
+<p align="center">
+```
+`<a href="https://batharva.github.io/robolab-web/">`{=html}`<strong>`{=html}🚀
+Launch Live Demo`</strong>`{=html}`</a>`{=html} ·
+`<a href="https://github.com/batharva/robolab-web">`{=html}`<strong>`{=html}View
+Source`</strong>`{=html}`</a>`{=html}
+```{=html}
+</p>
+```
+```{=html}
+<p align="center">
+```
+`<img src="https://img.shields.io/badge/Platform-Web%20Browser-2ea44f?style=flat-square" alt="Platform: Web Browser">`{=html}
+`<img src="https://img.shields.io/badge/JavaScript-Client--Side-f1e05a?style=flat-square" alt="JavaScript">`{=html}
+`<img src="https://img.shields.io/badge/3D-Three.js-111111?style=flat-square" alt="Three.js">`{=html}
+`<img src="https://img.shields.io/badge/Hosting-GitHub%20Pages-222222?style=flat-square" alt="GitHub Pages">`{=html}
+```{=html}
+</p>
+```
+```{=html}
+</p>
+```
 
-**🌐 Live demo: https://kanishkpatel0206.github.io/crayon-robotics-lab/**
+------------------------------------------------------------------------
 
-An interactive robot-kinematics studio built around Craig-style **Modified Denavit–Hartenberg** parameters: a colour-coded editable MDH table with a tool frame, a real 3D viewer (with prismatic rails, floor and collision checking), 16 robot presets, forward and inverse kinematics, Jacobian, trajectories, workspace analysis and full dynamics. It runs entirely in your browser; nothing is uploaded.
+## Overview
 
-Your Crayon layout and light theme (sidebar, hero cards, pill tabs, 3D viewport), running on a numerically verified robotics engine.
+**RoboLab Web** is a browser-based robotics learning and analysis
+environment that connects robotics mathematics with interactive
+calculations, graphs, and 3D visualization.
 
-## Run
-**Online:** open the live demo above. **Locally:** open `index.html` in Chrome, Edge or Firefox (three.js is bundled in `vendor/`, so 3D works offline; only the Google Fonts are optional, system fonts are the fallback). `node tests/run_selftests.js` runs the 30 engine checks.
+Use it to build robot manipulators, edit Denavit--Hartenberg (DH)
+parameters, solve forward and inverse kinematics, inspect Jacobians,
+simulate dynamics, plan trajectories, and explore robot workspaces.
 
-**Share a robot:** press **🔗 Share** to copy a link that contains your whole robot, for example `https://kanishkpatel0206.github.io/crayon-robotics-lab/#s=…`.
+-   **No installation required** for the live demo.
+-   **Client-side application:** no backend, account, or API key is
+    required for normal use.
+-   **Static deployment:** can be hosted using GitHub Pages.
+-   **Educational focus:** designed for experimentation and learning,
+    not safety-critical robot control.
 
-## v2 — Export & Report (new sidebar page)
-Turn the robot on screen into class-report material:
-- **Printable report:** title, name, course and date; the MDH table (variable cells marked, tool frame row); a **worked derivation** (every link matrix ⁱ⁻¹Tᵢ with the numbers substituted, then the final ⁰Tₙ and tool position); Jacobian with singular values; gravity torques; trajectory table and plots; workspace summary and plot; a 3D figure with caption. Tick the sections you want and choose 2/3/4/6 decimals. Open it and press **Print / Save as PDF**, or download it as `.html`.
-- **Copy for Word / Docs:** puts the report on the clipboard as formatted tables.
-- **LaTeX** (`tabular` + `bmatrix`), **Markdown**, **MATLAB** (Peter Corke Robotics Toolbox, modified DH) and **Python** (NumPy) export. Shift+click copies instead of downloading.
-- **Images:** 3D view as PNG (SVG if WebGL is unavailable); trajectory position/velocity/acceleration and workspace plots as PNG.
-- **CSV:** link matrices, Jacobian, current pose + tool position, gravity torques, trajectory.
-- Every report carries the date, the app version, the engine self-test result (30/30) and a **share link** that reopens the exact robot.
+## Features
 
-Verified by tests: the generated Python reproduces the page's forward kinematics on all 16 robots (5·10⁻⁵ mm), LaTeX/Markdown/MATLAB structure, CSV shapes, report content and the download/clipboard buttons (`tests/ui_export_test.js`, needs Python with NumPy).
+### 🦾 Robot Builder
 
-### 2.0.1 — export fixes
-- **3D image export fixed** (it produced an empty pale-blue picture). The snapshot now uses its own offscreen renderer and a camera that frames the whole robot (including the full travel of prismatic rails), so it works even while the 3D tab is hidden, and it refuses to return a blank image (the report then says so instead of showing an empty box). Coordinate frames can be included in the image.
-- Report: the figure comes first; derivation blocks no longer split across pages; proper ⁰T₁ notation and units; robot shown by name ("Stanford arm RRPRRR"); a short "Open this exact robot" link instead of a very long URL that ran off the page; colours print correctly; share links made from a local file point to the published site.
-- Tip: in the print dialog turn **off** "Headers and footers" and turn **on** "Background graphics".
+-   Create manipulators with 1--12 joints.
+-   Configure revolute and prismatic joints.
+-   Edit DH parameters, joint limits, mass, center of mass, and inertia.
+-   Add, remove, duplicate, rename, and modify joints.
+-   Explore four example robot configurations.
+-   Save and restore configurations using browser storage.
 
-## What changed under the hood
-| Page | Before | Now |
-|---|---|---|
-| Jacobian | finite-difference, position only (3×n) | analytic **6×n geometric Jacobian**, singular values (linear and 6D), condition, manipulability, singularity flag, finite-difference cross-check, angular velocity, **resolved-rate** solver |
-| Inverse kinematics | position-only DLS | DLS with **optional orientation (roll/pitch/yaw)**, **multi-start**, joint limits, several distinct solutions, every answer **re-checked by FK**, honest failure reasons, **Apply** button |
-| Dynamics | single-joint τ ≈ mgr·sin θ + Iα guess | full **M(q), C(q,q̇)q̇, g(q)**, inverse dynamics, selectable gravity direction, editable link masses, **RK4 forward simulation** with energy-drift check, play on robot |
-| Trajectory | single joint | adds a **synchronised all-joint move** to the last IK solution with limit checks |
-| Learning | – | in-page **self-test runner** (30 checks) |
-| Project | export only | **JSON import** with validation |
+### 📐 Denavit--Hartenberg (DH) Parameters
 
-All of it uses the Craig order `Rx(α[i-1]) Tx(a[i-1]) Rz(θ[i]) Tz(d[i])` plus the tool offset, exactly as the page's own forward kinematics. The engine's FK was compared with the page's FK on all 7 presets (identical), and a built-in test proves Modified DH ≡ classical DH for FK, Jacobian, M(q) and g(q).
+-   Edit a classical DH parameter table.
+-   Calculate individual link transformation matrices and cumulative
+    homogeneous transformations.
+-   Visualize robot coordinate frames.
+-   Export DH parameters to CSV.
 
-## v4 additions
-**Proper Modified-DH table** — columns in Craig order **α(i−1) · a(i−1) · θ(i) · d(i)**, colour-coded, with the joint-variable cell highlighted (θ for revolute, d for prismatic), min/max limits, an editable **tool frame row** (extra fixed frame: a_n along x, d_(n+1) along z), the transform banner and a live summary (DOF · joint string · reach). Row tools: move up/down, duplicate, insert, delete; Zero pose, Random pose, CSV and a "Load a robot…" menu.
+The classical DH transformation used is:
 
-**16 robots** (7 original + 8 new + Custom): PUMA 560-style, UR5-style (matches the published zero-pose TCP −817.25, −191.45, −5.49 mm), IRB 120-style, Stanford arm (RRPRRR), 7-DOF redundant LBR-style arm, SCARA RRPR, Cylindrical RPP, Spherical RRP. Library cards show DOF, joint string and reach.
+\[ {}\^{i-1}T_i =
+R_z(`\theta`{=tex}\_i)T_z(d_i)T_x(a_i)R_x(`\alpha`{=tex}\_i) \]
 
-**Fixed**
-- Switching a joint Prismatic → Revolute left the limits at [−250, 0]; now resets to ±180°.
-- Limits could be inverted (min ≥ max) or leave the joint outside its range; now corrected automatically.
-- The tool offset could not be edited and was x-only; now x and z, saved/exported/imported.
-- Export now includes the explicit `mdh_table`; import validates ranges.
+### 🎯 Forward Kinematics
 
-Tests: `node tests/run_selftests.js` (engine, 30 checks) and `npm i jsdom && node tests/ui_smoke_test.js` (24 UI checks across all robots).
+-   Calculate end-effector position and orientation.
+-   Inspect the 4 × 4 homogeneous transformation matrix and 3 × 3
+    rotation matrix.
+-   Calculate ZYX Euler angles.
+-   Check rotation-matrix orthonormality.
+-   Review calculation steps and compare results with analytical
+    reference solutions.
 
-## v5 — prismatic joints, visualizer and audit fixes
-**3D visualizer rewritten around the real Modified-DH geometry.** Each link is drawn as its true path: a(i−1) along x(i−1), then d(i) along z(i) (verified to close on the FK origin for all 16 robots to 1e-13). **Prismatic joints** now show a grey slide rail across the full min…max range, red end-stops, a rod that grows with d, and a carriage block at the current position. **Revolute joints** are cylinders along their z axis. The selected joint glows.
+### 🔄 Inverse Kinematics
 
-**Fixed**
-- Prismatic joints had no nudge buttons; now ±1 / ±10 mm and "min".
-- Inspector type switch forced limits [−250, 0] (conflicting with the table) and could leave d out of range. Table and inspector now share one validated edit path: type switch, min<max, and the variable is always clamped into its limits.
-- Joint cards showed d twice for prismatic joints; now Craig-ordered chips with the variable highlighted, a range bar and an AT LIMIT flag.
-- Dragging a slider pushed a new undo entry on every tick (undo history flooded); now one entry per drag.
-- Undo/redo and Save ignored the tool frame; they now restore joints + tool x/z. Stored/corrupt projects are sanitised at startup.
-- **Dynamics:** the slender-rod inertia estimate gave near-zero inertia to very short links (e.g. IRB-120 wrist), making the 5 ms RK4 simulation blow up (energy ~1e60). Added a minimum link inertia (~40 mm body radius) and a 2 ms step; the simulation now warns if the motion is still numerically stiff. Worst energy drift over a 2 s free swing across all 16 robots: 5.5e-4 (relative).
+-   Solve for joint configurations that reach a desired end-effector
+    target.
+-   Solve position-only and full-pose inverse-kinematics problems.
+-   Use a damped least-squares numerical solver with adaptive damping.
+-   Handle joint limits and use multi-start solving.
+-   Solve two-link planar IK analytically with elbow-up and elbow-down
+    solutions.
+-   Animate solutions and set targets in the 3D viewport.
+-   Report convergence failures and unreachable targets.
 
-Tests: `node tests/run_selftests.js` (30 engine checks); with `npm i jsdom`: `node tests/ui_smoke_test.js` (table, library, IK) and `node tests/ui_audit_test.js` (geometry, render, Jacobian vs finite differences, energy, NaN scan of every page for every robot, inspector/nudge/undo/save).
+### 🔢 Jacobian Analysis
 
+-   Calculate the geometric Jacobian in the base frame.
+-   Inspect singular values and condition number.
+-   Evaluate manipulability and identify singular configurations.
+-   Validate Jacobian calculations using finite differences.
+-   Map joint velocities to end-effector velocities.
+-   Solve inverse-velocity kinematics using damping.
 
-## Publish on GitHub Pages
-This project is published from the `main` branch root. To publish your own copy:
-1. Create a repository and upload **the contents of this folder** (keep `index.html` at the repository root, with `vendor/` beside it).
-2. Edit `LICENSE` and replace `<YOUR NAME>`.
-3. In the repository: **Settings → Pages → Build and deployment → Source: Deploy from a branch → Branch: `main` / `(root)` → Save.**
-4. After about a minute the site is live at `https://<user>.github.io/<repository>/`.
-The site is fully static: no build step and no server. All paths are relative, so it works under a `/repository/` sub-path.
+### 📈 Trajectory Planning
 
-## v7 — quick features
-- **🔗 Share:** copies a link that contains the whole robot (joints, tool frame, base height); opening it loads that robot.
-- **Keyboard:** ← / → move the selected joint (Shift ×10), [ ] choose a joint, Ctrl+Z / Ctrl+Y undo/redo, P presentation mode.
-- **⛶ Present:** clean fullscreen layout for lectures (P or Esc to exit).
-- **Payload test** (Dynamics page): extra joint torque/force from a mass at the tool, via the Jacobian transpose.
-- **Quick quiz** (Learning Center): compute the tool position from a random Modified-DH table; scored.
-- **Fixes:** undo, save and export now include the base height; Random pose always finds a collision-free pose; Zero pose raises the base height if the arm would hit the floor.
+-   Generate cubic and quintic joint-space trajectories.
+-   Configure position, velocity, and acceleration boundary conditions.
+-   Generate Cartesian straight-line trajectories using inverse
+    kinematics.
+-   View joint-limit warnings and failed-sample reports.
+-   Play, scrub, loop, and adjust playback speed.
+-   Visualize end-effector paths and motion trails.
+-   Plot position, velocity, and acceleration.
 
-## v6 — collision model and scrollable UI
-**Collision.** Every link, joint housing, prismatic rod/carriage and the tool is a capsule. Checked against a **floor** (with an adjustable *Base height*; a pedestal is drawn under the base), the **pedestal**, and **self-collision** between non-neighbouring links (links joined through zero-length wrist joints count as connected). Colliding links turn **red** in 3D and a status pill names the culprit (floor / pedestal / J2↔J5). With *Block collisions* on, any move from a clear pose that would collide (slider, nudge, table, IK apply, trajectory, animation) is refused with a message. Presets pick a base height automatically so every robot loads clear of the floor. IK solutions are tagged "⚠ collides" and listed last; the workspace sampler can exclude colliding poses.
+### ⚙️ Robot Dynamics
 
-**Scrolling and responsiveness.** Sticky, internally scrolling sidebar; joint tree and inspector scroll independently while the 3D view stays in place; tables get sticky headers and a bounded height; plot canvases scale to their container; the 3D view height adapts to the window; below 1000 px the sidebar becomes a horizontal strip; thin themed scrollbars; back-to-top button.
+Analyze the manipulator equation of motion:
 
-Tests added: `node tests/ui_collision_test.js` (all 16 presets load clear, 600 random moves never end in collision, floor/pedestal detection, status pill, workspace filter, scroll rules).
+\[ `\tau `{=tex}= M(q)`\ddot `{=tex}q +
+C(q,`\dot `{=tex}q)`\dot `{=tex}q + g(q) \]
 
-## Notes and limits
-- Units on the page stay mm/degrees; the engine works in m/rad internally.
-- Link masses are slender-rod estimates (default 1 kg per link, editable on the Dynamics page). Planar arms lying in the XY plane have zero gravity torque with −Z gravity; choose −Y gravity for a vertical plane.
-- Joint-limit-aware numerical IK can still fail near singularities; it then reports the best attempt instead of claiming success.
-- Presets are teaching models, not vendor-accurate robots.
+Capabilities include: - Joint-space mass matrix (M(q)). - Coriolis and
+centrifugal terms. - Gravity torque calculations and torque-term
+breakdowns. - Forward-dynamics simulation using fourth-order
+Runge--Kutta (RK4). - Torque plots along trajectories. - Configurable
+link masses, centers of mass, and inertia properties.
 
-## Credits and licence
-MIT licensed. © 2026 Kanishk Patel (UI and integration) and © 2026 Atharva Bhosale (RoboLab Web engine). three.js is MIT licensed. See `LICENSE` and `NOTICE.md`.
+### 🌐 Workspace Analysis
+
+-   Sample random robot configurations.
+-   Visualize the workspace as an interactive 3D point cloud.
+-   Inspect workspace bounds and bounding boxes.
+-   View XY, XZ, and YZ projections.
+-   Choose visualization color modes.
+-   Cancel workspace sampling.
+
+### 📊 Interactive Graphs
+
+Visualize joint position, velocity, acceleration, and torque;
+end-effector coordinates; path projections; inverse-kinematics error
+history; and workspace projections.
+
+Graph controls include zoom, pan, hover inspection, legend toggling, and
+CSV export.
+
+### 📚 Learning Tools
+
+-   Guided application tour.
+-   Five worked robotics examples.
+-   Forward- and inverse-kinematics exercises.
+-   Robotics concepts and DH diagrams.
+-   Interactive glossary.
+-   In-browser mathematical self-tests.
+
+### 💾 Projects and Export
+
+-   Save and open projects as JSON.
+-   Validate imported project data.
+-   Restore the previous session automatically.
+-   Export graph and calculation data as CSV.
+-   Generate printable HTML reports.
+-   Store configurations in browser storage.
+
+## Getting Started
+
+### Option 1: Use the live application
+
+Open **[RoboLab Web](https://batharva.github.io/robolab-web/)** in a
+modern browser. No installation is required.
+
+An internet connection is needed to load the Three.js library from its
+CDN.
+
+### Option 2: Run locally
+
+Clone the repository:
+
+``` bash
+git clone https://github.com/batharva/robolab-web.git
+cd robolab-web
+```
+
+Open `index.html` in a modern web browser.
+
+### Option 3: Publish with GitHub Pages
+
+1.  Push `index.html` and all required project files to the repository.
+2.  Open the repository's **Settings → Pages**.
+3.  Under **Build and deployment**, select **Deploy from a branch**.
+4.  Select the `main` branch and the `/ (root)` folder.
+5.  Click **Save** and wait for deployment.
+6.  Open the URL shown in the Pages settings.
+
+If the site is already deployed, updating the files on the configured
+branch will trigger a new deployment.
+
+## Testing and Validation
+
+The project includes automated mathematical tests, worked examples, and
+independent numerical verification.
+
+Validation covers: - DH transformation identities. - Rotation-matrix
+orthonormality and determinant. - Forward kinematics against analytical
+solutions. - Analytical and numerical inverse kinematics. - Jacobian
+calculations against finite differences. - Cubic and quintic trajectory
+boundary conditions. - Mass matrix, Coriolis terms, and gravity
+torques. - Forward- and inverse-dynamics consistency. - Energy
+conservation in torque-free simulation. - Invalid project-data rejection
+and project round trips. - Application modes and robot-scene
+transformations.
+
+Run the JavaScript self-tests with Node.js:
+
+``` bash
+node tests/run_selftests.js
+```
+
+Run the independent NumPy checks:
+
+``` bash
+python3 tests/reference_check.py
+```
+
+You can also open the application and select **Results & Export → Run
+self-tests**.
+
+See [`TESTING.md`](TESTING.md) for detailed results and known testing
+limitations. Test commands assume the corresponding files and
+dependencies are present in your checkout.
+
+## Technology Stack
+
+  Technology     Purpose
+  -------------- ------------------------------------------------
+  HTML5          Application structure
+  CSS3           Interface design and styling
+  JavaScript     Robotics calculations and application logic
+  Three.js       Interactive 3D visualization
+  Python         Development-time source generation and testing
+  Node.js        Automated JavaScript tests
+  NumPy          Independent numerical verification
+  GitHub Pages   Static website hosting
+
+## Robotics Mathematics
+
+  Concept                          Application
+  -------------------------------- -----------------------------------------------
+  Homogeneous transformations      Link poses and end-effector position
+  Rotation matrices                Three-dimensional orientation
+  Forward kinematics               Joint coordinates to end-effector pose
+  Inverse kinematics               Desired pose to joint coordinates
+  Geometric Jacobian               Joint and end-effector velocity relationships
+  Singular-value analysis          Singularity and manipulability assessment
+  Cubic and quintic polynomials    Smooth trajectory generation
+  Mass matrix and gravity vector   Robot dynamics
+  Christoffel symbols              Coriolis and centrifugal terms
+  RK4 integration                  Forward-dynamics simulation
+
+### Coordinate and unit conventions
+
+-   Internal length units: metres.
+-   Internal angular units: radians.
+-   DH table and UI angles: degrees.
+-   World coordinate system: Z-up.
+-   DH convention: classical DH; modified DH is not implemented.
+-   Euler angle convention: ZYX, with (R =
+    R_z(`\text{yaw}`{=tex})R_y(`\text{pitch}`{=tex})R_x(`\text{roll}`{=tex})).
+
+## Project Structure
+
+``` text
+robolab-web/
+├── index.html
+├── README.md
+├── TESTING.md
+├── build.py
+├── style.css
+├── body.html
+├── src/
+│   ├── core.js
+│   └── app_*.js
+└── tests/
+    ├── run_selftests.js
+    └── reference_check.py
+```
+
+This is the documented project layout; filenames can vary if the
+repository has changed.
+
+## Limitations
+
+-   Only classical DH parameters are implemented; modified DH is not
+    supported.
+-   Example robot models are simplified educational representations.
+-   Default mass and inertia values are estimates.
+-   Dynamics do not include friction, actuator dynamics, contact forces,
+    or joint-limit enforcement during simulation.
+-   Numerical inverse kinematics may fail near singularities, joint
+    limits, or local minima.
+-   Cartesian trajectory velocity and acceleration are estimated using
+    finite differences.
+-   Workspace sampling estimates reachability; it does not prove the
+    exact boundary.
+-   Workspace analysis does not evaluate self-collision or orientation
+    reachability.
+-   Automated tests do not replace visual testing of WebGL rendering,
+    touch interactions, mobile layouts, or accessibility.
+
+RoboLab Web is intended for education, numerical experimentation, and
+robotics analysis---not safety-critical control of physical robots.
+
+## Future Improvements
+
+Potential enhancements include: - Modified DH convention support. -
+Additional industrial robot models. - URDF import and export. -
+Collision detection and avoidance. - Advanced trajectory optimization. -
+Friction and actuator dynamics. - Additional inverse-kinematics
+algorithms. - Improved mobile visualization and accessibility.
+
+These are potential future enhancements, not claims about currently
+implemented features.
+
+## Author
+
+**Atharva Bhosale**\
+Mechanical Engineering Student \| Robotics \| Simulation \| Software
+Development
+
+-   GitHub: [@batharva](https://github.com/batharva)
+-   Repository:
+    [batharva/robolab-web](https://github.com/batharva/robolab-web)
+-   Live demo: [RoboLab Web](https://batharva.github.io/robolab-web/)
+
+## License
+
+No specific license is asserted here. If you want others to reuse,
+modify, and distribute the project, add a `LICENSE` file that states the
+terms you choose.
+
+------------------------------------------------------------------------
+
+```{=html}
+<p align="center">
+```
+`<strong>`{=html}Explore robotics. Understand the mathematics. Visualize
+the motion.`</strong>`{=html}`<br>`{=html}`<br>`{=html}
+`<a href="https://batharva.github.io/robolab-web/">`{=html}🚀 Launch
+RoboLab Web`</a>`{=html}
+```{=html}
+</p>
+```
