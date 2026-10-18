@@ -347,7 +347,7 @@ Mechanical Engineering Student | Robotics | Simulation | Software Development
 
 ### Kanishk Patel
 
-- **GitHub:** [Add Kanishk's GitHub profile link]
+- **GitHub:** [@KanishkPatel0206](https://github.com/KanishkPatel0206)
 
 ---
 
